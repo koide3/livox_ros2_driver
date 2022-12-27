@@ -41,14 +41,13 @@
 namespace livox_ros {
 
 /** Lidar Data Distribute Control--------------------------------------------*/
-Lddc::Lddc(int format, int multi_topic, int data_src, int output_type,
-           double frq, std::string &frame_id)
-    : transfer_format_(format),
-      use_multi_topic_(multi_topic),
-      data_src_(data_src),
-      output_type_(output_type),
-      publish_frq_(frq),
-      frame_id_(frame_id) {
+Lddc::Lddc(int format, int multi_topic, int data_src, int output_type, double frq, std::string& frame_id)
+: transfer_format_(format),
+  use_multi_topic_(multi_topic),
+  data_src_(data_src),
+  output_type_(output_type),
+  publish_frq_(frq),
+  frame_id_(frame_id) {
   publish_period_ns_ = kNsPerSecond / publish_frq_;
   lds_ = nullptr;
 #if 0
@@ -62,12 +61,9 @@ Lddc::~Lddc() {
   }
 }
 
-int32_t Lddc::GetPublishStartTime(LidarDevice *lidar, LidarDataQueue *queue,
-                                  uint64_t *start_time,
-                                  StoragePacket *storage_packet) {
+int32_t Lddc::GetPublishStartTime(LidarDevice* lidar, LidarDataQueue* queue, uint64_t* start_time, StoragePacket* storage_packet) {
   QueuePrePop(queue, storage_packet);
-  uint64_t timestamp =
-      GetStoragePacketTimestamp(storage_packet, lidar->data_src);
+  uint64_t timestamp = GetStoragePacketTimestamp(storage_packet, lidar->data_src);
   uint32_t remaining_time = timestamp % publish_period_ns_;
   uint32_t diff_time = publish_period_ns_ - remaining_time;
   /** Get start time, down to the period boundary */
@@ -135,14 +131,13 @@ void Lddc::InitPointcloud2MsgHeader(sensor_msgs::msg::PointCloud2& cloud) {
   cloud.point_step = sizeof(LivoxPointXyzrtl);
 }
 
-uint32_t Lddc::PublishPointcloud2(LidarDataQueue *queue, uint32_t packet_num,
-                                  uint8_t handle) {
+uint32_t Lddc::PublishPointcloud2(LidarDataQueue* queue, uint32_t packet_num, uint8_t handle) {
   uint64_t timestamp = 0;
   uint64_t last_timestamp = 0;
   uint32_t published_packet = 0;
 
   StoragePacket storage_packet;
-  LidarDevice *lidar = &lds_->lidars_[handle];
+  LidarDevice* lidar = &lds_->lidars_[handle];
   if (GetPublishStartTime(lidar, queue, &last_timestamp, &storage_packet)) {
     /* the remaning packets in queue maybe not enough after skip */
     return 0;
@@ -150,23 +145,20 @@ uint32_t Lddc::PublishPointcloud2(LidarDataQueue *queue, uint32_t packet_num,
 
   sensor_msgs::msg::PointCloud2 cloud;
   InitPointcloud2MsgHeader(cloud);
-  cloud.data.resize(packet_num * kMaxPointPerEthPacket *
-                    sizeof(LivoxPointXyzrtl));
+  cloud.data.resize(packet_num * kMaxPointPerEthPacket * sizeof(LivoxPointXyzrtl));
   cloud.point_step = sizeof(LivoxPointXyzrtl);
 
-  uint8_t *point_base = cloud.data.data();
+  uint8_t* point_base = cloud.data.data();
   uint8_t data_source = lidar->data_src;
   uint32_t line_num = GetLaserLineNumber(lidar->info.type);
   uint32_t echo_num = GetEchoNumPerPoint(lidar->raw_data_type);
   uint32_t is_zero_packet = 0;
   while ((published_packet < packet_num) && !QueueIsEmpty(queue)) {
     QueuePrePop(queue, &storage_packet);
-    LivoxEthPacket *raw_packet =
-        reinterpret_cast<LivoxEthPacket *>(storage_packet.raw_data);
+    LivoxEthPacket* raw_packet = reinterpret_cast<LivoxEthPacket*>(storage_packet.raw_data);
     timestamp = GetStoragePacketTimestamp(&storage_packet, data_source);
     int64_t packet_gap = timestamp - last_timestamp;
-    if ((packet_gap > lidar->packet_interval_max) &&
-        lidar->data_is_pubulished) {
+    if ((packet_gap > lidar->packet_interval_max) && lidar->data_is_pubulished) {
       // RCLCPP_INFO(cur_node_->get_logger(), "Lidar[%d] packet time interval is %ldns", handle,
       //     packet_gap);
       if (kSourceLvxFile != data_source) {
@@ -182,20 +174,16 @@ uint32_t Lddc::PublishPointcloud2(LidarDataQueue *queue, uint32_t packet_num,
     uint32_t single_point_num = storage_packet.point_num * echo_num;
 
     if (kSourceLvxFile != data_source) {
-      PointConvertHandler pf_point_convert =
-          GetConvertHandler(lidar->raw_data_type);
+      PointConvertHandler pf_point_convert = GetConvertHandler(lidar->raw_data_type);
       if (pf_point_convert) {
-        point_base = pf_point_convert(point_base, raw_packet,
-            lidar->extrinsic_parameter, line_num);
+        point_base = pf_point_convert(point_base, raw_packet, lidar->extrinsic_parameter, line_num);
       } else {
         /** Skip the packet */
-        RCLCPP_INFO(cur_node_->get_logger(), "Lidar[%d] unkown packet type[%d]", handle,
-                 raw_packet->data_type);
+        RCLCPP_INFO(cur_node_->get_logger(), "Lidar[%d] unkown packet type[%d]", handle, raw_packet->data_type);
         break;
       }
     } else {
-      point_base = LivoxPointToPxyzrtl(point_base, raw_packet,
-          lidar->extrinsic_parameter, line_num);
+      point_base = LivoxPointToPxyzrtl(point_base, raw_packet, lidar->extrinsic_parameter, line_num);
     }
 
     if (!is_zero_packet) {
@@ -207,13 +195,11 @@ uint32_t Lddc::PublishPointcloud2(LidarDataQueue *queue, uint32_t packet_num,
     ++published_packet;
     last_timestamp = timestamp;
   }
-  cloud.row_step     = cloud.width * cloud.point_step;
+  cloud.row_step = cloud.width * cloud.point_step;
   cloud.is_bigendian = false;
-  cloud.is_dense     = true;
+  cloud.is_dense = true;
   cloud.data.resize(cloud.row_step); /** Adjust to the real size */
-  rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr publisher =
-      std::dynamic_pointer_cast<rclcpp::Publisher
-      <sensor_msgs::msg::PointCloud2>>(GetCurrentPublisher(handle));
+  rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr publisher = std::dynamic_pointer_cast<rclcpp::Publisher<sensor_msgs::msg::PointCloud2>>(GetCurrentPublisher(handle));
   if (kOutputToRos == output_type_) {
     publisher->publish(cloud);
   } else {
@@ -222,7 +208,7 @@ uint32_t Lddc::PublishPointcloud2(LidarDataQueue *queue, uint32_t packet_num,
       bag_->write(p_publisher->getTopic(), rclcpp::Time(timestamp),
                   cloud);
     }
-#endif    
+#endif
   }
   if (!lidar->data_is_pubulished) {
     lidar->data_is_pubulished = true;
@@ -230,8 +216,7 @@ uint32_t Lddc::PublishPointcloud2(LidarDataQueue *queue, uint32_t packet_num,
   return published_packet;
 }
 
-void Lddc::FillPointsToPclMsg(PointCloud& pcl_msg, \
-    LivoxPointXyzrtl* src_point, uint32_t num) {
+void Lddc::FillPointsToPclMsg(PointCloud& pcl_msg, LivoxPointXyzrtl* src_point, uint32_t num) {
   LivoxPointXyzrtl* point_xyzrtl = (LivoxPointXyzrtl*)src_point;
   for (uint32_t i = 0; i < num; i++) {
     pcl::PointXYZI point;
@@ -245,14 +230,13 @@ void Lddc::FillPointsToPclMsg(PointCloud& pcl_msg, \
 }
 
 /* for pcl::pxyzi */
-uint32_t Lddc::PublishPointcloudData(LidarDataQueue *queue, uint32_t packet_num,
-                                     uint8_t handle) {
+uint32_t Lddc::PublishPointcloudData(LidarDataQueue* queue, uint32_t packet_num, uint8_t handle) {
   uint64_t timestamp = 0;
   uint64_t last_timestamp = 0;
   uint32_t published_packet = 0;
 
   StoragePacket storage_packet;
-  LidarDevice *lidar = &lds_->lidars_[handle];
+  LidarDevice* lidar = &lds_->lidars_[handle];
   if (GetPublishStartTime(lidar, queue, &last_timestamp, &storage_packet)) {
     /* the remaning packets in queue maybe not enough after skip */
     return 0;
@@ -270,13 +254,11 @@ uint32_t Lddc::PublishPointcloudData(LidarDataQueue *queue, uint32_t packet_num,
   uint32_t echo_num = GetEchoNumPerPoint(lidar->raw_data_type);
   while ((published_packet < packet_num) && !QueueIsEmpty(queue)) {
     QueuePrePop(queue, &storage_packet);
-    LivoxEthPacket *raw_packet =
-        reinterpret_cast<LivoxEthPacket *>(storage_packet.raw_data);
+    LivoxEthPacket* raw_packet = reinterpret_cast<LivoxEthPacket*>(storage_packet.raw_data);
     timestamp = GetStoragePacketTimestamp(&storage_packet, data_source);
     int64_t packet_gap = timestamp - last_timestamp;
-    if ((packet_gap > lidar->packet_interval_max) &&
-        lidar->data_is_pubulished) {
-      //RCLCPP_INFO(cur_node_->get_logger(), "Lidar[%d] packet time interval is %ldns", handle, packet_gap);
+    if ((packet_gap > lidar->packet_interval_max) && lidar->data_is_pubulished) {
+      // RCLCPP_INFO(cur_node_->get_logger(), "Lidar[%d] packet time interval is %ldns", handle, packet_gap);
       if (kSourceLvxFile != data_source) {
         timestamp = last_timestamp + lidar->packet_interval;
         ZeroPointDataOfStoragePacket(&storage_packet);
@@ -289,22 +271,18 @@ uint32_t Lddc::PublishPointcloudData(LidarDataQueue *queue, uint32_t packet_num,
     uint32_t single_point_num = storage_packet.point_num * echo_num;
 
     if (kSourceLvxFile != data_source) {
-      PointConvertHandler pf_point_convert =
-          GetConvertHandler(lidar->raw_data_type);
+      PointConvertHandler pf_point_convert = GetConvertHandler(lidar->raw_data_type);
       if (pf_point_convert) {
-        pf_point_convert(point_buf, raw_packet, lidar->extrinsic_parameter, \
-            line_num);
+        pf_point_convert(point_buf, raw_packet, lidar->extrinsic_parameter, line_num);
       } else {
         /* Skip the packet */
-        RCLCPP_INFO(cur_node_->get_logger(), "Lidar[%d] unkown packet type[%d]", handle,
-                 raw_packet->data_type);
+        RCLCPP_INFO(cur_node_->get_logger(), "Lidar[%d] unkown packet type[%d]", handle, raw_packet->data_type);
         break;
       }
     } else {
-      LivoxPointToPxyzrtl(point_buf, raw_packet, lidar->extrinsic_parameter, \
-          line_num);
+      LivoxPointToPxyzrtl(point_buf, raw_packet, lidar->extrinsic_parameter, line_num);
     }
-    LivoxPointXyzrtl *dst_point = (LivoxPointXyzrtl *)point_buf;
+    LivoxPointXyzrtl* dst_point = (LivoxPointXyzrtl*)point_buf;
     FillPointsToPclMsg(cloud, dst_point, single_point_num);
     if (!is_zero_packet) {
       QueuePopUpdate(queue);
@@ -316,18 +294,18 @@ uint32_t Lddc::PublishPointcloudData(LidarDataQueue *queue, uint32_t packet_num,
     last_timestamp = timestamp;
   }
 
-  rclcpp::Publisher<PointCloud>::SharedPtr publisher =
-      std::dynamic_pointer_cast<rclcpp::Publisher<PointCloud>>
-      (GetCurrentPublisher(handle));
+  rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr publisher = std::dynamic_pointer_cast<rclcpp::Publisher<sensor_msgs::msg::PointCloud2>>(GetCurrentPublisher(handle));
   if (kOutputToRos == output_type_) {
-    publisher->publish(cloud);
+    sensor_msgs::msg::PointCloud2 msg;
+    pcl::toROSMsg(cloud, msg);
+    publisher->publish(msg);
   } else {
 #if 0    
     if (bag_) {
       bag_->write(p_publisher->getTopic(), rclcpp::Time(timestamp),
                   cloud);
     }
-#endif    
+#endif
   }
   if (!lidar->data_is_pubulished) {
     lidar->data_is_pubulished = true;
@@ -335,9 +313,13 @@ uint32_t Lddc::PublishPointcloudData(LidarDataQueue *queue, uint32_t packet_num,
   return published_packet;
 }
 
-void Lddc::FillPointsToCustomMsg(livox_interfaces::msg::CustomMsg& livox_msg, \
-    LivoxPointXyzrtl* src_point, uint32_t num, uint32_t offset_time, \
-    uint32_t point_interval, uint32_t echo_num) {
+void Lddc::FillPointsToCustomMsg(
+  livox_interfaces::msg::CustomMsg& livox_msg,
+  LivoxPointXyzrtl* src_point,
+  uint32_t num,
+  uint32_t offset_time,
+  uint32_t point_interval,
+  uint32_t echo_num) {
   LivoxPointXyzrtl* point_xyzrtl = (LivoxPointXyzrtl*)src_point;
   for (uint32_t i = 0; i < num; i++) {
     livox_interfaces::msg::CustomPoint point;
@@ -357,14 +339,13 @@ void Lddc::FillPointsToCustomMsg(livox_interfaces::msg::CustomMsg& livox_msg, \
   }
 }
 
-uint32_t Lddc::PublishCustomPointcloud(LidarDataQueue *queue,
-                                       uint32_t packet_num, uint8_t handle) {
+uint32_t Lddc::PublishCustomPointcloud(LidarDataQueue* queue, uint32_t packet_num, uint8_t handle) {
   // static uint32_t msg_seq = 0;
   uint64_t timestamp = 0;
   uint64_t last_timestamp = 0;
 
   StoragePacket storage_packet;
-  LidarDevice *lidar = &lds_->lidars_[handle];
+  LidarDevice* lidar = &lds_->lidars_[handle];
   if (GetPublishStartTime(lidar, queue, &last_timestamp, &storage_packet)) {
     /* the remaning packets in queue maybe not enough after skip */
     return 0;
@@ -384,16 +365,14 @@ uint32_t Lddc::PublishCustomPointcloud(LidarDataQueue *queue,
   uint32_t echo_num = GetEchoNumPerPoint(lidar->raw_data_type);
   uint32_t point_interval = GetPointInterval(lidar->info.type);
   uint32_t published_packet = 0;
-  uint32_t packet_offset_time = 0;  /** uint:ns */
+  uint32_t packet_offset_time = 0; /** uint:ns */
   uint32_t is_zero_packet = 0;
   while (published_packet < packet_num) {
     QueuePrePop(queue, &storage_packet);
-    LivoxEthPacket *raw_packet =
-        reinterpret_cast<LivoxEthPacket *>(storage_packet.raw_data);
+    LivoxEthPacket* raw_packet = reinterpret_cast<LivoxEthPacket*>(storage_packet.raw_data);
     timestamp = GetStoragePacketTimestamp(&storage_packet, data_source);
     int64_t packet_gap = timestamp - last_timestamp;
-    if ((packet_gap > lidar->packet_interval_max) &&
-        lidar->data_is_pubulished) {
+    if ((packet_gap > lidar->packet_interval_max) && lidar->data_is_pubulished) {
       // RCLCPP_INFO(this->get_logger(), "Lidar[%d] packet time interval is %ldns", handle,
       // packet_gap);
       if (kSourceLvxFile != data_source) {
@@ -414,24 +393,19 @@ uint32_t Lddc::PublishCustomPointcloud(LidarDataQueue *queue,
     uint32_t single_point_num = storage_packet.point_num * echo_num;
 
     if (kSourceLvxFile != data_source) {
-      PointConvertHandler pf_point_convert =
-          GetConvertHandler(lidar->raw_data_type);
+      PointConvertHandler pf_point_convert = GetConvertHandler(lidar->raw_data_type);
       if (pf_point_convert) {
-        pf_point_convert(point_buf, raw_packet, lidar->extrinsic_parameter, \
-            line_num);
+        pf_point_convert(point_buf, raw_packet, lidar->extrinsic_parameter, line_num);
       } else {
         /* Skip the packet */
-        RCLCPP_INFO(cur_node_->get_logger(), "Lidar[%d] unkown packet type[%d]", handle,
-                 lidar->raw_data_type);
+        RCLCPP_INFO(cur_node_->get_logger(), "Lidar[%d] unkown packet type[%d]", handle, lidar->raw_data_type);
         break;
       }
     } else {
-      LivoxPointToPxyzrtl(point_buf, raw_packet, lidar->extrinsic_parameter, \
-          line_num);
+      LivoxPointToPxyzrtl(point_buf, raw_packet, lidar->extrinsic_parameter, line_num);
     }
-    LivoxPointXyzrtl *dst_point = (LivoxPointXyzrtl *)point_buf;
-    FillPointsToCustomMsg(livox_msg, dst_point, single_point_num, \
-        packet_offset_time, point_interval, echo_num);
+    LivoxPointXyzrtl* dst_point = (LivoxPointXyzrtl*)point_buf;
+    FillPointsToCustomMsg(livox_msg, dst_point, single_point_num, packet_offset_time, point_interval, echo_num);
 
     if (!is_zero_packet) {
       QueuePopUpdate(queue);
@@ -445,8 +419,7 @@ uint32_t Lddc::PublishCustomPointcloud(LidarDataQueue *queue,
   }
 
   rclcpp::Publisher<livox_interfaces::msg::CustomMsg>::SharedPtr publisher =
-      std::dynamic_pointer_cast<rclcpp::Publisher
-      <livox_interfaces::msg::CustomMsg>>(GetCurrentPublisher(handle));  
+    std::dynamic_pointer_cast<rclcpp::Publisher<livox_interfaces::msg::CustomMsg>>(GetCurrentPublisher(handle));
   if (kOutputToRos == output_type_) {
     publisher->publish(livox_msg);
   } else {
@@ -455,7 +428,7 @@ uint32_t Lddc::PublishCustomPointcloud(LidarDataQueue *queue,
       bag_->write(p_publisher->getTopic(), rclcpp::Time(timestamp),
           livox_msg);
     }
-#endif    
+#endif
   }
 
   if (!lidar->data_is_pubulished) {
@@ -464,8 +437,7 @@ uint32_t Lddc::PublishCustomPointcloud(LidarDataQueue *queue,
   return published_packet;
 }
 
-uint32_t Lddc::PublishImuData(LidarDataQueue *queue, uint32_t packet_num,
-                              uint8_t handle) {
+uint32_t Lddc::PublishImuData(LidarDataQueue* queue, uint32_t packet_num, uint8_t handle) {
   uint64_t timestamp = 0;
   uint32_t published_packet = 0;
 
@@ -475,18 +447,16 @@ uint32_t Lddc::PublishImuData(LidarDataQueue *queue, uint32_t packet_num,
   uint8_t data_source = lds_->lidars_[handle].data_src;
   StoragePacket storage_packet;
   QueuePrePop(queue, &storage_packet);
-  LivoxEthPacket *raw_packet =
-      reinterpret_cast<LivoxEthPacket *>(storage_packet.raw_data);
+  LivoxEthPacket* raw_packet = reinterpret_cast<LivoxEthPacket*>(storage_packet.raw_data);
   timestamp = GetStoragePacketTimestamp(&storage_packet, data_source);
   if (timestamp) {
-    imu_data.header.stamp =
-        rclcpp::Time(timestamp);  // to ros time stamp
+    imu_data.header.stamp = rclcpp::Time(timestamp);  // to ros time stamp
   }
 
   uint8_t point_buf[2048];
   LivoxImuDataProcess(point_buf, raw_packet);
 
-  LivoxImuPoint *imu = (LivoxImuPoint *)point_buf;
+  LivoxImuPoint* imu = (LivoxImuPoint*)point_buf;
   imu_data.angular_velocity.x = imu->gyro_x;
   imu_data.angular_velocity.y = imu->gyro_y;
   imu_data.angular_velocity.z = imu->gyro_z;
@@ -497,9 +467,7 @@ uint32_t Lddc::PublishImuData(LidarDataQueue *queue, uint32_t packet_num,
   QueuePopUpdate(queue);
   ++published_packet;
 
-  rclcpp::Publisher<sensor_msgs::msg::Imu>::SharedPtr publisher =
-      std::dynamic_pointer_cast<rclcpp::Publisher
-      <sensor_msgs::msg::Imu>>(GetCurrentImuPublisher(handle));
+  rclcpp::Publisher<sensor_msgs::msg::Imu>::SharedPtr publisher = std::dynamic_pointer_cast<rclcpp::Publisher<sensor_msgs::msg::Imu>>(GetCurrentImuPublisher(handle));
   if (kOutputToRos == output_type_) {
     publisher->publish(imu_data);
   } else {
@@ -508,12 +476,12 @@ uint32_t Lddc::PublishImuData(LidarDataQueue *queue, uint32_t packet_num,
       bag_->write(p_publisher->getTopic(), rclcpp::Time(timestamp),
                   imu_data);
     }
-#endif    
+#endif
   }
   return published_packet;
 }
 
-int Lddc::RegisterLds(Lds *lds) {
+int Lddc::RegisterLds(Lds* lds) {
   if (lds_ == nullptr) {
     lds_ = lds;
     return 0;
@@ -522,8 +490,8 @@ int Lddc::RegisterLds(Lds *lds) {
   }
 }
 
-void Lddc::PollingLidarPointCloudData(uint8_t handle, LidarDevice *lidar) {
-  LidarDataQueue *p_queue = &lidar->data;
+void Lddc::PollingLidarPointCloudData(uint8_t handle, LidarDevice* lidar) {
+  LidarDataQueue* p_queue = &lidar->data;
   if (p_queue->storage_packet == nullptr) {
     return;
   }
@@ -545,8 +513,8 @@ void Lddc::PollingLidarPointCloudData(uint8_t handle, LidarDevice *lidar) {
   }
 }
 
-void Lddc::PollingLidarImuData(uint8_t handle, LidarDevice *lidar) {
-  LidarDataQueue *p_queue = &lidar->imu_data;
+void Lddc::PollingLidarImuData(uint8_t handle, LidarDevice* lidar) {
+  LidarDataQueue* p_queue = &lidar->imu_data;
   if (p_queue->storage_packet == nullptr) {
     return;
   }
@@ -562,10 +530,9 @@ void Lddc::DistributeLidarData(void) {
   lds_->semaphore_.Wait();
   for (uint32_t i = 0; i < lds_->lidar_count_; i++) {
     uint32_t lidar_id = i;
-    LidarDevice *lidar = &lds_->lidars_[lidar_id];
-    LidarDataQueue *p_queue = &lidar->data;
-    if ((kConnectStateSampling != lidar->connect_state) ||
-        (p_queue == nullptr)) {
+    LidarDevice* lidar = &lds_->lidars_[lidar_id];
+    LidarDataQueue* p_queue = &lidar->data;
+    if ((kConnectStateSampling != lidar->connect_state) || (p_queue == nullptr)) {
       continue;
     }
     PollingLidarPointCloudData(lidar_id, lidar);
@@ -577,35 +544,28 @@ void Lddc::DistributeLidarData(void) {
   }
 }
 
-std::shared_ptr<rclcpp::PublisherBase> Lddc::CreatePublisher(uint8_t msg_type,
-    std::string &topic_name, uint32_t queue_size) {
-    if (kPointCloud2Msg == msg_type) {
-      RCLCPP_INFO(cur_node_->get_logger(),
-          "%s publish use PointCloud2 format", topic_name.c_str());
-      return cur_node_->create_publisher<
-          sensor_msgs::msg::PointCloud2>(topic_name, queue_size);
-    } else if (kLivoxCustomMsg == msg_type) {
-      RCLCPP_INFO(cur_node_->get_logger(),
-          "%s publish use livox custom format", topic_name);
-      return cur_node_->create_publisher<
-          livox_interfaces::msg::CustomMsg>(topic_name, queue_size);
-    }
+std::shared_ptr<rclcpp::PublisherBase> Lddc::CreatePublisher(uint8_t msg_type, std::string& topic_name, uint32_t queue_size) {
+  if (kPointCloud2Msg == msg_type) {
+    RCLCPP_INFO(cur_node_->get_logger(), "%s publish use PointCloud2 format", topic_name.c_str());
+    return cur_node_->create_publisher<sensor_msgs::msg::PointCloud2>(topic_name, queue_size);
+  } else if (kLivoxCustomMsg == msg_type) {
+    RCLCPP_INFO(cur_node_->get_logger(), "%s publish use livox custom format", topic_name.c_str());
+    return cur_node_->create_publisher<livox_interfaces::msg::CustomMsg>(topic_name, queue_size);
+  }
 #if 0
     else if (kPclPxyziMsg == msg_type)  {
       RCLCPP_INFO(cur_node_->get_logger(),
           "%s publish use pcl PointXYZI format", topic_name.c_str());
       return cur_node_->create_publisher<PointCloud>(topic_name, queue_size);
     }
-#endif    
-    else if (kLivoxImuMsg == msg_type)  {
-      RCLCPP_INFO(cur_node_->get_logger(),
-          "%s publish use imu format", topic_name.c_str());
-      return cur_node_->create_publisher<sensor_msgs::msg::Imu>(topic_name,
-          queue_size);
-    } else {
-      std::shared_ptr<rclcpp::PublisherBase>null_publisher(nullptr);
-      return null_publisher;
-    }
+#endif
+  else if (kLivoxImuMsg == msg_type) {
+    RCLCPP_INFO(cur_node_->get_logger(), "%s publish use imu format", topic_name.c_str());
+    return cur_node_->create_publisher<sensor_msgs::msg::Imu>(topic_name, queue_size);
+  } else {
+    std::shared_ptr<rclcpp::PublisherBase> null_publisher(nullptr);
+    return null_publisher;
+  }
 }
 
 std::shared_ptr<rclcpp::PublisherBase> Lddc::GetCurrentPublisher(uint8_t handle) {
@@ -614,18 +574,16 @@ std::shared_ptr<rclcpp::PublisherBase> Lddc::GetCurrentPublisher(uint8_t handle)
     if (!private_pub_[handle]) {
       char name_str[48];
       memset(name_str, 0, sizeof(name_str));
-      snprintf(name_str, sizeof(name_str), "livox/lidar_%s",
-          lds_->lidars_[handle].info.broadcast_code);
+      snprintf(name_str, sizeof(name_str), "livox/lidar_%s", lds_->lidars_[handle].info.broadcast_code);
       std::string topic_name(name_str);
-      queue_size = queue_size * 2; // queue size is 64 for only one lidar
-      private_pub_[handle] = CreatePublisher(transfer_format_, topic_name,
-          queue_size);
+      queue_size = queue_size * 2;  // queue size is 64 for only one lidar
+      private_pub_[handle] = CreatePublisher(transfer_format_, topic_name, queue_size);
     }
     return private_pub_[handle];
   } else {
     if (!global_pub_) {
       std::string topic_name("livox/lidar");
-      queue_size = queue_size * 8; // shared queue size is 256, for all lidars
+      queue_size = queue_size * 8;  // shared queue size is 256, for all lidars
       global_pub_ = CreatePublisher(transfer_format_, topic_name, queue_size);
     }
     return global_pub_;
@@ -638,25 +596,23 @@ std::shared_ptr<rclcpp::PublisherBase> Lddc::GetCurrentImuPublisher(uint8_t hand
     if (!private_imu_pub_[handle]) {
       char name_str[48];
       memset(name_str, 0, sizeof(name_str));
-      snprintf(name_str, sizeof(name_str), "livox/imu_%s",
-          lds_->lidars_[handle].info.broadcast_code);
+      snprintf(name_str, sizeof(name_str), "livox/imu_%s", lds_->lidars_[handle].info.broadcast_code);
       std::string topic_name(name_str);
-      queue_size = queue_size * 2; // queue size is 64 for only one lidar
-      private_imu_pub_[handle] = CreatePublisher(kLivoxImuMsg, topic_name,
-          queue_size);
+      queue_size = queue_size * 2;  // queue size is 64 for only one lidar
+      private_imu_pub_[handle] = CreatePublisher(kLivoxImuMsg, topic_name, queue_size);
     }
     return private_imu_pub_[handle];
   } else {
     if (!global_imu_pub_) {
       std::string topic_name("livox/imu");
-      queue_size = queue_size * 8; // shared queue size is 256, for all lidars
+      queue_size = queue_size * 8;  // shared queue size is 256, for all lidars
       global_imu_pub_ = CreatePublisher(kLivoxImuMsg, topic_name, queue_size);
     }
     return global_imu_pub_;
   }
 }
 
-void Lddc::CreateBagFile(const std::string &file_name) {
+void Lddc::CreateBagFile(const std::string& file_name) {
   // if (!bag_) {
   //   bag_ = new rosbag::Bag;
   //   bag_->open(file_name, rosbag::bagmode::Write);

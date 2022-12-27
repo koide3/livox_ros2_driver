@@ -26,6 +26,7 @@
 
 #include <stdint.h>
 #include <string.h>
+#include <cstdio>
 #include <thread>
 #include <chrono>
 #include <functional>
@@ -33,11 +34,10 @@
 namespace livox_ros {
 using namespace std;
 
-TimeSync::TimeSync() : exit_poll_state_(false), start_poll_state_(false),
-    exit_poll_data_(false), start_poll_data_(false) {
+TimeSync::TimeSync() : exit_poll_state_(false), start_poll_state_(false), exit_poll_data_(false), start_poll_data_(false) {
   fsm_state_ = kOpenDev;
-  uart_  = nullptr;
-  comm_  = nullptr;
+  uart_ = nullptr;
+  comm_ = nullptr;
   fn_cb_ = nullptr;
   client_data_ = nullptr;
   rx_bytes_ = 0;
@@ -69,7 +69,7 @@ int32_t TimeSync::InitTimeSync(const TimeSyncConfig& config) {
   comm_ = new CommProtocol(config_.protocol_config);
 
   t_poll_state_ = std::make_shared<std::thread>(std::bind(&TimeSync::PollStateLoop, this));
-  t_poll_data_  = std::make_shared<std::thread>(std::bind(&TimeSync::PollDataLoop, this));
+  t_poll_data_ = std::make_shared<std::thread>(std::bind(&TimeSync::PollDataLoop, this));
 
   return 0;
 }
@@ -87,9 +87,9 @@ int32_t TimeSync::DeInitTimeSync() {
 
 void TimeSync::StopTimesync() {
   start_poll_state_ = false;
-  start_poll_data_  = false;
-  exit_poll_state_  = true;
-  exit_poll_data_   = true;
+  start_poll_data_ = false;
+  exit_poll_state_ = true;
+  exit_poll_data_ = true;
   if (t_poll_state_) {
     t_poll_state_->join();
     t_poll_state_ = nullptr;
@@ -97,7 +97,7 @@ void TimeSync::StopTimesync() {
 
   if (t_poll_state_) {
     t_poll_data_->join();
-    t_poll_data_  = nullptr;
+    t_poll_data_ = nullptr;
   }
 }
 
@@ -107,7 +107,7 @@ void TimeSync::PollStateLoop() {
   }
 
   while (!exit_poll_state_) {
-    if(fsm_state_ == kOpenDev) {
+    if (fsm_state_ == kOpenDev) {
       FsmOpenDev();
     } else if (fsm_state_ == kPrepareDev) {
       FsmPrepareDev();
@@ -126,10 +126,10 @@ void TimeSync::PollDataLoop() {
   while (!exit_poll_data_) {
     if (uart_->IsOpen()) {
       uint32_t get_buf_size;
-      uint8_t *cache_buf = comm_->FetchCacheFreeSpace(&get_buf_size);
+      uint8_t* cache_buf = comm_->FetchCacheFreeSpace(&get_buf_size);
       if (get_buf_size) {
         uint32_t read_data_size;
-        read_data_size = uart_->Read((char *)cache_buf, get_buf_size);
+        read_data_size = uart_->Read((char*)cache_buf, get_buf_size);
         if (read_data_size) {
           comm_->UpdateCacheWrIdx(read_data_size);
           rx_bytes_ += read_data_size;
@@ -149,8 +149,8 @@ void TimeSync::PollDataLoop() {
 }
 
 void TimeSync::FsmTransferState(uint8_t new_state) {
-  if(new_state < kFsmDevUndef) {
-      fsm_state_ = new_state;
+  if (new_state < kFsmDevUndef) {
+    fsm_state_ = new_state;
   }
   transfer_time_ = chrono::steady_clock::now();
 }
@@ -167,7 +167,7 @@ void TimeSync::FsmOpenDev() {
 
 void TimeSync::FsmPrepareDev() {
   chrono::steady_clock::time_point t = chrono::steady_clock::now();
-  chrono::milliseconds time_gap = chrono::duration_cast<chrono::milliseconds>(t-transfer_time_);
+  chrono::milliseconds time_gap = chrono::duration_cast<chrono::milliseconds>(t - transfer_time_);
   /** delay some time when device is opened, 4s */
   if (time_gap.count() > 3000) {
     FsmTransferState(kCheckDevState);
@@ -192,4 +192,4 @@ void TimeSync::FsmCheckDevState() {
   }
 }
 
-}
+}  // namespace livox_ros

@@ -25,6 +25,7 @@
 #ifndef TIMESYNC_TIMESYNC_H_
 #define TIMESYNC_TIMESYNC_H_
 
+#include <memory>
 #include <thread>
 #include "comm_protocol.h"
 #include "comm_device.h"
@@ -34,13 +35,7 @@ namespace livox_ros {
 
 typedef void (*FnReceiveSyncTimeCb)(const char* rmc, uint32_t rmc_length, void* client_data);
 
-
-enum FsmPollState {
-  kOpenDev,
-  kPrepareDev,
-  kCheckDevState,
-  kFsmDevUndef
-};
+enum FsmPollState { kOpenDev, kPrepareDev, kCheckDevState, kFsmDevUndef };
 
 typedef struct {
   CommDevConfig dev_config;
@@ -48,7 +43,7 @@ typedef struct {
 } TimeSyncConfig;
 
 class TimeSync {
- public:
+public:
   static TimeSync* GetInstance() {
     static TimeSync time_sync;
 
@@ -59,7 +54,7 @@ class TimeSync {
   int32_t DeInitTimeSync();
   void StartTimesync() {
     start_poll_state_ = true;
-    start_poll_data_  = true;
+    start_poll_data_ = true;
   }
 
   int32_t SetReceiveSyncTimeCb(FnReceiveSyncTimeCb cb, void* data) {
@@ -72,7 +67,7 @@ class TimeSync {
     }
   }
 
- private:
+private:
   TimeSync();
   ~TimeSync();
   TimeSync(const TimeSync&) = delete;
@@ -99,12 +94,12 @@ class TimeSync {
   void* client_data_;
 
   volatile uint8_t fsm_state_;
-  std::chrono::steady_clock::time_point transfer_time_; 
+  std::chrono::steady_clock::time_point transfer_time_;
   void FsmTransferState(uint8_t new_state);
   void FsmOpenDev();
   void FsmPrepareDev();
   void FsmCheckDevState();
 };
 
-}
+}  // namespace livox_ros
 #endif
